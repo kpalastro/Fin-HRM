@@ -1,0 +1,18 @@
+# Core MLX dependencies
+mlx>=0.5.0
+
+# Scientific computing
+numpy>=1.21.0
+
+# Progress bars
+tqdm>=4.64.0
+
+# Configuration
+pyyaml>=5.4.0
+
+# Optional: For wandb logging (if you want to use it)
+# wandb>=0.13.0
+
+# Optional: For visualization
+# matplotlib>=3.5.0
+# seaborn>=0.11.0
