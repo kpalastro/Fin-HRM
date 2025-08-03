@@ -9,9 +9,9 @@ python pretrain.py \
     --H_layers 4 \
     --L_layers 4 \
     --learning_rate 1e-4 \
-    --weight_decay 1.0 \
+    --weight_decay 0.1 \
     --batch_size 384 \
-    --train_samples 1000 \
+    --train_samples 2000 \
     --val_samples 200 \
     --max_epochs 20000 \
     --min_difficulty 20 \

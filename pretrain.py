@@ -16,6 +16,7 @@ from typing import Tuple, List, Dict, Optional
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
+import mlx.utils
 
 # Import model components from the new structure
 from models.hrm import HierarchicalReasoningModel, HRMCarry
@@ -441,9 +442,8 @@ def main():
         halt_max_steps=args.halt_max_steps,
     )
     
-    # Count parameters
-    params = nn.utils.tree_flatten(model.parameters())[0]
-    total_params = sum(x.size for x in params if hasattr(x, 'size'))
+    # Count parameters - use mlx.utils.tree_flatten not nn.utils
+    total_params = sum(v.size for _, v in mlx.utils.tree_flatten(model.parameters()))
     print(f"✅ Model parameters: {total_params:,}")
     print(f"✅ Architecture: {args.H_cycles}×{args.L_cycles} cycles, {args.H_layers}+{args.L_layers} layers")
     print()

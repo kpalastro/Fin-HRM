@@ -70,14 +70,18 @@ class HRMReasoningModule(nn.Module):
     
     def __init__(self, n_layers: int, d_model: int, n_heads: int, expansion: float = 2.0):
         super().__init__()
-        self.layers = [HRMTransformerBlock(d_model, n_heads, expansion, rms_norm_eps=1e-5) for _ in range(n_layers)]
+        # In MLX, we need to register layers as attributes for parameter tracking
+        for i in range(n_layers):
+            setattr(self, f'layer_{i}', HRMTransformerBlock(d_model, n_heads, expansion, rms_norm_eps=1e-5))
+        self.n_layers = n_layers
     
     def __call__(self, hidden_states: mx.array, input_injection: mx.array, **kwargs) -> mx.array:
         # Input injection (add) - EXACT match to original line 94
         hidden_states = hidden_states + input_injection
         
         # Layers - EXACT match to original lines 96-97
-        for layer in self.layers:
+        for i in range(self.n_layers):
+            layer = getattr(self, f'layer_{i}')
             hidden_states = layer(hidden_states=hidden_states, **kwargs)
         
         return hidden_states
