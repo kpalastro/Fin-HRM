@@ -84,7 +84,6 @@ class AdamATan2(optim.Optimizer):
         # This is the key innovation - no epsilon needed!
         # atan2 returns values in [-pi, pi], we clip to prevent extreme updates
         update = mx.arctan2(m_hat, v_hat_sqrt)
-        update = mx.clip(update, -1.5, 1.5)  # Prevent extreme angles
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
