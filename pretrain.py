@@ -89,7 +89,7 @@ class HRMTrainer:
         
         # Use AdamATan2 optimizer (matches original HRM implementation)
         # This handles high weight decay (1.0) much better than standard AdamW
-        self.optimizer = AdamATan2Scaled(
+        self.optimizer = AdamATan2(
             learning_rate=learning_rate, 
             weight_decay=weight_decay,
             betas=(0.9, 0.95)  # Llama-style betas from original
