@@ -1,12 +1,12 @@
-# HRM Training Configuration for Sudoku-Extreme
-# EXACT parameters from HRM README.md single GPU setup (line 74)
+# HRM Training Configuration for Sudoku-Extreme (8-GPU version)
+# EXACT parameters from HRM README.md 8-GPU setup (line 140)
 
-# Core hyperparameters (EXACT match to README)
-learning_rate: 0.00007  # lr=7e-5 from README
-embedding_lr: 0.00007   # puzzle_emb_lr=7e-5 from README  
+# Core hyperparameters (EXACT match to README line 140)
+learning_rate: 0.0001   # lr=1e-4 from README
+embedding_lr: 0.0001    # puzzle_emb_lr=1e-4 from README
 weight_decay: 1.0       # weight_decay=1.0 from README
 embedding_weight_decay: 1.0  # puzzle_emb_weight_decay=1.0 from README
-batch_size: 384         # global_batch_size=384 from README
+batch_size: 256         # Adjusted for single GPU (8-GPU would use higher)
 max_epochs: 20000       # epochs=20000 from README
 
 # Learning rate scheduling
@@ -41,5 +41,5 @@ save_every: 2000
 checkpoint_dir: "checkpoints"
 
 # Monitoring
-project_name: "hrm-sudoku"
-run_name: "sudoku-extreme-training"
+project_name: "hrm-sudoku-8gpu"
+run_name: "sudoku-extreme-8gpu-training"
