@@ -31,11 +31,13 @@ class AdamATan2(optim.Optimizer):
         learning_rate: float = 1e-4,
         betas: tuple = (0.9, 0.99),
         weight_decay: float = 0.0,
+        a: float = 1.27,  # Scaling factor from PyTorch implementation
     ):
         super().__init__()
         self.learning_rate = learning_rate
         self.beta1, self.beta2 = betas
         self.weight_decay = weight_decay
+        self.a = a  # Scaling factor for update
         
         # Initialize state
         self._step = 0
@@ -54,6 +56,10 @@ class AdamATan2(optim.Optimizer):
         state: dict,
     ) -> mx.array:
         """Apply AdamATan2 update to a single parameter"""
+        
+        # Apply weight decay FIRST (like PyTorch)
+        if self.weight_decay > 0:
+            parameter = parameter * (1 - self.learning_rate * self.weight_decay)
         
         # Get moments
         m = state["m"]
@@ -83,14 +89,10 @@ class AdamATan2(optim.Optimizer):
         # where b = 1 / learning_rate, a = 1
         
         b = 1.0 / self.learning_rate
-        # Add small epsilon to prevent numerical issues with very small v
-        den = mx.sqrt(mx.maximum(v / bias_correction2, 1e-20) * b * b)
+        # EXACT match to PyTorch: exp_avg_sq.mul(b * b / bias_correct2).sqrt_()
+        den = mx.sqrt(v * (b * b / bias_correction2))
         update = mx.arctan2(m / bias_correction1, den)
-        update = update * self.learning_rate  # original uses -lr * a where a=1
-        
-        # Apply weight decay (decoupled style)
-        if self.weight_decay > 0:
-            parameter = parameter * (1 - self.learning_rate * self.weight_decay)
+        update = update * self.learning_rate * self.a  # Scale by a factor
         
         # Apply update
         parameter = parameter - update
@@ -111,6 +113,7 @@ class AdamATan2Scaled(AdamATan2):
     update magnitudes, making hyperparameter transfer easier.
     """
     
+    
     def apply_single(
         self,
         gradient: mx.array,
@@ -118,6 +121,10 @@ class AdamATan2Scaled(AdamATan2):
         state: dict,
     ) -> mx.array:
         """Apply scaled AdamATan2 update"""
+        
+        # Apply weight decay FIRST (like PyTorch)
+        if self.weight_decay > 0:
+            parameter = parameter * (1 - self.learning_rate * self.weight_decay)
         
         # Get moments
         m = state["m"]
@@ -137,23 +144,21 @@ class AdamATan2Scaled(AdamATan2):
         bias_correction1 = 1 - self.beta1 ** step
         bias_correction2 = 1 - self.beta2 ** step
         
+        
         # Compute bias-corrected moments
         m_hat = m / bias_correction1
         v_hat = v / bias_correction2
         
         # EXACT implementation from PyTorch adam-atan2:
         b = 1.0 / self.learning_rate
-        # Add small epsilon to prevent numerical issues with very small v
-        den = mx.sqrt(mx.maximum(v / bias_correction2, 1e-20) * b * b)
+        # EXACT match to PyTorch: exp_avg_sq.mul(b * b / bias_correct2).sqrt_()
+        den = mx.sqrt(v * (b * b / bias_correction2))
         update = mx.arctan2(m / bias_correction1, den)
         update = update * self.learning_rate
         
-        # Apply weight decay (decoupled style)
-        if self.weight_decay > 0:
-            parameter = parameter * (1 - self.learning_rate * self.weight_decay)
-        
         # Apply update
         parameter = parameter - update
+        
         
         return parameter
 
