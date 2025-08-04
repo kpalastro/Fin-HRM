@@ -80,8 +80,8 @@ class AdamATan2(optim.Optimizer):
         # This is the key innovation - no epsilon needed!
         # atan2(y, x) computes the angle, giving us direction-preserving scaling
         # Note: We scale by v_hat_sqrt to maintain proper magnitude
-        update_direction = mx.arctan2(m_hat, v_hat_sqrt + 1e-30) * (2.0 / mx.pi)
-        update = self.learning_rate * update_direction * v_hat_sqrt
+        update = mx.arctan2(m_hat, v_hat_sqrt + 1e-30)
+        update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
         if self.weight_decay > 0:
@@ -142,11 +142,8 @@ class AdamATan2Scaled(AdamATan2):
         # The key insight: atan2 gives direction, we need to scale by magnitude
         # This matches the expected update size from standard Adam
         eps = 1e-30  # Very small epsilon for numerical stability
-        update_direction = mx.arctan2(m_hat, denom + eps) * (2.0 / mx.pi)
-        
-        # Scale by the magnitude that standard Adam would use
-        # This makes the update magnitude similar to m_hat / (denom + eps)
-        update = self.learning_rate * update_direction * mx.abs(m_hat)
+        update = mx.arctan2(m_hat, denom + eps)
+        update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
         if self.weight_decay > 0:

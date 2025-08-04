@@ -9,8 +9,8 @@ python pretrain.py \
     --L_cycles 2 \
     --H_layers 4 \
     --L_layers 4 \
-    --learning_rate 1e-3 \
-    --weight_decay 0.1 \
+    --learning_rate 1e-4 \
+    --weight_decay 1.0 \
     --batch_size 256 \
     --train_samples 1000 \
     --val_samples 200 \
