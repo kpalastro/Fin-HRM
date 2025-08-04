@@ -76,19 +76,15 @@ class AdamATan2(optim.Optimizer):
         m_hat = m / bias_correction1
         v_hat = v / bias_correction2
         
-        # Add small epsilon to prevent sqrt of negative numbers due to numerical errors
-        v_hat = mx.maximum(v_hat, 0)
-        v_hat_sqrt = mx.sqrt(v_hat + 1e-8)  # Use larger epsilon for stability
+        # EXACT implementation from PyTorch adam-atan2:
+        # den = exp_avg_sq.mul(b * b / bias_correct2).sqrt_()
+        # update = exp_avg.mul(1. / bias_correct1).atan2_(den)
+        # where b = 1 / learning_rate, a = 1
         
-        # AdamATan2 update using atan2 instead of division
-        # This is the key innovation - no epsilon needed!
-        update = mx.arctan2(m_hat, v_hat_sqrt)
-        
-        # Prevent NaN propagation
-        update = mx.where(mx.isnan(update), 0.0, update)
-        update = mx.where(mx.isinf(update), mx.sign(update) * 1.5, update)
-        
-        update = update * self.learning_rate
+        b = 1.0 / self.learning_rate
+        den = mx.sqrt(v / bias_correction2 * b * b)
+        update = mx.arctan2(m / bias_correction1, den)
+        update = update * self.learning_rate  # original uses -lr * a where a=1
         
         # Apply weight decay (decoupled style)
         if self.weight_decay > 0:
@@ -142,19 +138,10 @@ class AdamATan2Scaled(AdamATan2):
         m_hat = m / bias_correction1
         v_hat = v / bias_correction2
         
-        # Compute denominator for scaling
-        v_hat = mx.maximum(v_hat, 0)  # Ensure non-negative
-        denom = mx.sqrt(v_hat + 1e-8)  # Use larger epsilon for stability
-        
-        # AdamATan2 with proper scaling
-        # Match the PyTorch implementation more closely
-        # atan2 provides the update direction with built-in magnitude scaling
-        update = mx.arctan2(m_hat, denom)
-        
-        # Prevent NaN propagation
-        update = mx.where(mx.isnan(update), 0.0, update)
-        update = mx.where(mx.isinf(update), mx.sign(update) * 1.5, update)
-        
+        # EXACT implementation from PyTorch adam-atan2:
+        b = 1.0 / self.learning_rate
+        den = mx.sqrt(v / bias_correction2 * b * b)
+        update = mx.arctan2(m / bias_correction1, den)
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
