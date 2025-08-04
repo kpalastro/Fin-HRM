@@ -74,13 +74,15 @@ class AdamATan2(optim.Optimizer):
         
         # Compute bias-corrected moments
         m_hat = m / bias_correction1
-        v_hat_sqrt = mx.sqrt(v / bias_correction2)
+        v_hat = v / bias_correction2
+        
+        # Add small epsilon to prevent sqrt of negative numbers due to numerical errors
+        v_hat = mx.maximum(v_hat, 0)
+        v_hat_sqrt = mx.sqrt(v_hat + 1e-30)
         
         # AdamATan2 update using atan2 instead of division
         # This is the key innovation - no epsilon needed!
-        # atan2(y, x) computes the angle, giving us direction-preserving scaling
-        # Note: We scale by v_hat_sqrt to maintain proper magnitude
-        update = mx.arctan2(m_hat, v_hat_sqrt + 1e-30)
+        update = mx.arctan2(m_hat, v_hat_sqrt)
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
@@ -94,7 +96,7 @@ class AdamATan2(optim.Optimizer):
     
     def apply_gradients(self, gradients, parameters):
         """Apply gradients to all parameters"""
-        self._step += 1
+        # Don't increment global step here - it's handled per parameter
         return super().apply_gradients(gradients, parameters)
 
 
@@ -136,13 +138,13 @@ class AdamATan2Scaled(AdamATan2):
         v_hat = v / bias_correction2
         
         # Compute denominator for scaling
-        denom = mx.sqrt(v_hat)
+        v_hat = mx.maximum(v_hat, 0)  # Ensure non-negative
+        denom = mx.sqrt(v_hat + 1e-30)
         
         # AdamATan2 with proper scaling
-        # The key insight: atan2 gives direction, we need to scale by magnitude
-        # This matches the expected update size from standard Adam
-        eps = 1e-30  # Very small epsilon for numerical stability
-        update = mx.arctan2(m_hat, denom + eps)
+        # Match the PyTorch implementation more closely
+        # atan2 provides the update direction with built-in magnitude scaling
+        update = mx.arctan2(m_hat, denom)
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
