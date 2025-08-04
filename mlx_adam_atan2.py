@@ -68,7 +68,7 @@ class AdamATan2(optim.Optimizer):
         state["v"] = v
         
         # Bias correction
-        step = self._step + 1
+        step = state["step"]
         bias_correction1 = 1 - self.beta1 ** step
         bias_correction2 = 1 - self.beta2 ** step
         
@@ -82,7 +82,9 @@ class AdamATan2(optim.Optimizer):
         
         # AdamATan2 update using atan2 instead of division
         # This is the key innovation - no epsilon needed!
+        # atan2 returns values in [-pi, pi], we clip to prevent extreme updates
         update = mx.arctan2(m_hat, v_hat_sqrt)
+        update = mx.clip(update, -1.5, 1.5)  # Prevent extreme angles
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
@@ -129,7 +131,7 @@ class AdamATan2Scaled(AdamATan2):
         state["v"] = v
         
         # Bias correction
-        step = self._step + 1
+        step = state["step"]
         bias_correction1 = 1 - self.beta1 ** step
         bias_correction2 = 1 - self.beta2 ** step
         
@@ -145,6 +147,7 @@ class AdamATan2Scaled(AdamATan2):
         # Match the PyTorch implementation more closely
         # atan2 provides the update direction with built-in magnitude scaling
         update = mx.arctan2(m_hat, denom)
+        update = mx.clip(update, -1.5, 1.5)  # Prevent extreme angles
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
