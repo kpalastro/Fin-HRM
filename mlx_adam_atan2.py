@@ -44,6 +44,7 @@ class AdamATan2(optim.Optimizer):
         """Initialize optimizer state for a single parameter"""
         state["m"] = mx.zeros_like(parameter)  # First moment
         state["v"] = mx.zeros_like(parameter)  # Second moment
+        state["step"] = 0  # Track steps per parameter
         return state
     
     def apply_single(
@@ -78,7 +79,9 @@ class AdamATan2(optim.Optimizer):
         # AdamATan2 update using atan2 instead of division
         # This is the key innovation - no epsilon needed!
         # atan2(y, x) computes the angle, giving us direction-preserving scaling
-        update = self.learning_rate * mx.arctan2(m_hat, v_hat_sqrt) * (2.0 / mx.pi)
+        # Note: We scale by v_hat_sqrt to maintain proper magnitude
+        update_direction = mx.arctan2(m_hat, v_hat_sqrt + 1e-30) * (2.0 / mx.pi)
+        update = self.learning_rate * update_direction * v_hat_sqrt
         
         # Apply weight decay (decoupled style)
         if self.weight_decay > 0:
@@ -136,10 +139,14 @@ class AdamATan2Scaled(AdamATan2):
         denom = mx.sqrt(v_hat)
         
         # AdamATan2 with proper scaling
-        # Scale factor approximates the expected magnitude from standard Adam
-        scale = mx.sqrt(mx.mean(v_hat) + 1e-8)
-        update_direction = mx.arctan2(m_hat, denom) * (2.0 / mx.pi)
-        update = self.learning_rate * update_direction * scale
+        # The key insight: atan2 gives direction, we need to scale by magnitude
+        # This matches the expected update size from standard Adam
+        eps = 1e-30  # Very small epsilon for numerical stability
+        update_direction = mx.arctan2(m_hat, denom + eps) * (2.0 / mx.pi)
+        
+        # Scale by the magnitude that standard Adam would use
+        # This makes the update magnitude similar to m_hat / (denom + eps)
+        update = self.learning_rate * update_direction * mx.abs(m_hat)
         
         # Apply weight decay (decoupled style)
         if self.weight_decay > 0:
