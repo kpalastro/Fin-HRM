@@ -18,6 +18,7 @@ import mlx.nn as nn
 import mlx.optimizers as optim
 from mlx_adam_atan2 import AdamATan2, AdamATan2Scaled
 from mlx_adam_atan2_exact import AdamATan2Exact
+from dual_optimizer import DualAdamATan2
 from lr_scheduler import CosineScheduleWithWarmup
 import mlx.utils
 
@@ -83,6 +84,7 @@ class HRMTrainer:
         eval_interval: int = 2000,
         warmup_steps: int = 2000,
         min_lr_ratio: float = 0.1,
+        embedding_lr: float = None,  # If None, use same as base lr
     ):
         self.model = model
         self.train_puzzles, self.train_solutions = train_data
@@ -93,18 +95,38 @@ class HRMTrainer:
 
         # Use AdamATan2 optimizer (matches original HRM implementation)
         # This handles high weight decay (1.0) much better than standard AdamW
-        # Use exact PyTorch AdamATan2 port (matches original HRM implementation)
-        self.optimizer = AdamATan2Exact(
-            learning_rate=learning_rate,
-            weight_decay=weight_decay,
-            betas=(0.9, 0.95),  # PyTorch AdamATan2 defaults
-            a=1.27,  # PyTorch default scaling
-            b=1.0    # PyTorch default
-        )
         
-        # Store separate learning rate for embeddings (like original HRM)
-        # This corresponds to puzzle_emb_lr=7e-5 in the PyTorch implementation
-        self.embedding_lr = 7e-5
+        # Set embedding learning rate
+        if embedding_lr is None:
+            embedding_lr = learning_rate  # Use same LR if not specified
+        self.embedding_lr = embedding_lr
+        
+        # Use dual optimizer if embedding LR is different from base LR
+        if abs(embedding_lr - learning_rate) > 1e-8:
+            print("🔧 Using dual optimizer setup (different embedding LR)")
+            self.optimizer = DualAdamATan2(
+                base_lr=learning_rate,
+                embedding_lr=embedding_lr,
+                weight_decay=weight_decay,
+                embedding_weight_decay=weight_decay,  # Use same weight decay for now
+                betas=(0.9, 0.95),
+                a=1.27,
+                b=1.0
+            )
+            self.use_dual_optimizer = True
+        else:
+            print("🔧 Using single optimizer setup (same LR for all parameters)")
+            self.optimizer = AdamATan2Exact(
+                learning_rate=learning_rate,
+                weight_decay=weight_decay,
+                betas=(0.9, 0.95),  # PyTorch AdamATan2 defaults
+                a=1.27,  # PyTorch default scaling
+                b=1.0    # PyTorch default
+            )
+            self.use_dual_optimizer = False
+        
+        # Initialize optimizer with model parameters
+        self.optimizer.init(self.model.trainable_parameters())
         
         # Calculate total training steps for LR scheduler
         steps_per_epoch = len(self.train_puzzles) // self.batch_size
@@ -277,7 +299,13 @@ class HRMTrainer:
                 grads = clip_grads(grads, self.grad_clip_norm)
 
                 # Update learning rate with scheduler (matches original HRM)
-                current_lr = self.lr_scheduler.update_optimizer_lr(self.optimizer, self.step)
+                if self.use_dual_optimizer:
+                    # For dual optimizer, update main optimizer's LR
+                    current_lr = self.lr_scheduler.get_lr(self.step)
+                    self.optimizer.update_learning_rate(current_lr)
+                else:
+                    # For single optimizer, use standard update
+                    current_lr = self.lr_scheduler.update_optimizer_lr(self.optimizer, self.step)
 
                 # Update
                 self.optimizer.update(self.model, grads)
@@ -454,6 +482,7 @@ def main():
     parser.add_argument("--weight_decay", type=float, default=0.1, help="Weight decay for optimizer")
     parser.add_argument("--warmup_steps", type=int, default=2000, help="Learning rate warmup steps")
     parser.add_argument("--min_lr_ratio", type=float, default=0.1, help="Minimum LR ratio for cosine schedule")
+    parser.add_argument("--embedding_lr", type=float, default=None, help="Separate learning rate for embeddings (default: same as main LR)")
     parser.add_argument("--no_auto_resume", action="store_true", help="Disable automatic checkpoint resuming")
 
     args = parser.parse_args()
@@ -509,6 +538,7 @@ def main():
         max_epochs=args.max_epochs,
         warmup_steps=args.warmup_steps,
         min_lr_ratio=args.min_lr_ratio,
+        embedding_lr=args.embedding_lr,
     )
 
     # Set checkpoint directory
