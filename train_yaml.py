@@ -41,11 +41,9 @@ def load_sudoku_data(data_path: str, split: str = "train", max_samples: int = 10
         num_augmentations=1 if split == "train" else 0
     )
 
-    # Add special tokens to make sequence length 83 (81 + 2 special tokens)
-    # Use token 10 for both start and end (vocab_size=11 means tokens 0-10)
-    START_TOKEN = 10
-    END_TOKEN = 10  # Same token for start and end
-
+    # Use raw sequences (length 81) to match dataset builder format
+    # No special tokens needed - vocab is 0-10 where 0=blank, 1-9=digits, 10=pad
+    
     processed_puzzles = []
     processed_solutions = []
 
@@ -56,12 +54,9 @@ def load_sudoku_data(data_path: str, split: str = "train", max_samples: int = 10
         if hasattr(solution, 'tolist'):
             solution = solution.tolist()
 
-        # Add start token at beginning and end token at end
-        puzzle_with_tokens = [START_TOKEN] + puzzle + [END_TOKEN]
-        solution_with_tokens = [START_TOKEN] + solution + [END_TOKEN]
-
-        processed_puzzles.append(puzzle_with_tokens)
-        processed_solutions.append(solution_with_tokens)
+        # Use sequences as-is (length 81, no special tokens)
+        processed_puzzles.append(puzzle)
+        processed_solutions.append(solution)
 
     return processed_puzzles, processed_solutions
 
