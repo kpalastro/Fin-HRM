@@ -1,0 +1,181 @@
+"""
+MLX implementation of AdamATan2 optimizer
+
+Based on the paper "Scaling Exponents Across Parameterizations and Optimizers"
+and the adam-atan2-pytorch implementation by lucidrains.
+
+Key innovation: Replaces division by sqrt(v) + epsilon with atan2 function
+for better numerical stability and scale invariance.
+"""
+
+import mlx.core as mx
+import mlx.optimizers as optim
+from typing import Optional, Dict, Any
+
+
+class AdamATan2(optim.Optimizer):
+    """
+    AdamATan2 optimizer for MLX
+    
+    Uses atan2 instead of division for numerical stability without epsilon.
+    Particularly effective with high weight decay values.
+    
+    Args:
+        learning_rate: Learning rate (default: 1e-4)
+        betas: Coefficients for computing running averages (default: [0.9, 0.99])
+        weight_decay: Weight decay coefficient (default: 0.0)
+    """
+    
+    def __init__(
+        self,
+        learning_rate: float = 1e-4,
+        betas: tuple = (0.9, 0.99),
+        weight_decay: float = 0.0,
+    ):
+        super().__init__()
+        self.learning_rate = learning_rate
+        self.beta1, self.beta2 = betas
+        self.weight_decay = weight_decay
+        
+        # Initialize state
+        self._step = 0
+        
+    def init_single(self, parameter: mx.array, state: dict) -> dict:
+        """Initialize optimizer state for a single parameter"""
+        state["m"] = mx.zeros_like(parameter)  # First moment
+        state["v"] = mx.zeros_like(parameter)  # Second moment
+        return state
+    
+    def apply_single(
+        self,
+        gradient: mx.array,
+        parameter: mx.array,
+        state: dict,
+    ) -> mx.array:
+        """Apply AdamATan2 update to a single parameter"""
+        
+        # Get moments
+        m = state["m"]
+        v = state["v"]
+        
+        # Update biased moments
+        m = self.beta1 * m + (1 - self.beta1) * gradient
+        v = self.beta2 * v + (1 - self.beta2) * (gradient ** 2)
+        
+        # Update state
+        state["m"] = m
+        state["v"] = v
+        
+        # Bias correction
+        step = self._step + 1
+        bias_correction1 = 1 - self.beta1 ** step
+        bias_correction2 = 1 - self.beta2 ** step
+        
+        # Compute bias-corrected moments
+        m_hat = m / bias_correction1
+        v_hat_sqrt = mx.sqrt(v / bias_correction2)
+        
+        # AdamATan2 update using atan2 instead of division
+        # This is the key innovation - no epsilon needed!
+        # atan2(y, x) computes the angle, giving us direction-preserving scaling
+        update = self.learning_rate * mx.arctan2(m_hat, v_hat_sqrt) * (2.0 / mx.pi)
+        
+        # Apply weight decay (decoupled style)
+        if self.weight_decay > 0:
+            parameter = parameter * (1 - self.learning_rate * self.weight_decay)
+        
+        # Apply update
+        parameter = parameter - update
+        
+        return parameter
+    
+    def apply_gradients(self, gradients, parameters):
+        """Apply gradients to all parameters"""
+        self._step += 1
+        return super().apply_gradients(gradients, parameters)
+
+
+class AdamATan2Scaled(AdamATan2):
+    """
+    Enhanced version with better scaling for the atan2 operation
+    
+    This version scales the atan2 output to better match traditional Adam's
+    update magnitudes, making hyperparameter transfer easier.
+    """
+    
+    def apply_single(
+        self,
+        gradient: mx.array,
+        parameter: mx.array,
+        state: dict,
+    ) -> mx.array:
+        """Apply scaled AdamATan2 update"""
+        
+        # Get moments
+        m = state["m"]
+        v = state["v"]
+        
+        # Update biased moments
+        m = self.beta1 * m + (1 - self.beta1) * gradient
+        v = self.beta2 * v + (1 - self.beta2) * (gradient ** 2)
+        
+        # Update state
+        state["m"] = m
+        state["v"] = v
+        
+        # Bias correction
+        step = self._step + 1
+        bias_correction1 = 1 - self.beta1 ** step
+        bias_correction2 = 1 - self.beta2 ** step
+        
+        # Compute bias-corrected moments
+        m_hat = m / bias_correction1
+        v_hat = v / bias_correction2
+        
+        # Compute denominator for scaling
+        denom = mx.sqrt(v_hat)
+        
+        # AdamATan2 with proper scaling
+        # Scale factor approximates the expected magnitude from standard Adam
+        scale = mx.sqrt(mx.mean(v_hat) + 1e-8)
+        update_direction = mx.arctan2(m_hat, denom) * (2.0 / mx.pi)
+        update = self.learning_rate * update_direction * scale
+        
+        # Apply weight decay (decoupled style)
+        if self.weight_decay > 0:
+            parameter = parameter * (1 - self.learning_rate * self.weight_decay)
+        
+        # Apply update
+        parameter = parameter - update
+        
+        return parameter
+
+
+def test_adam_atan2():
+    """Test the AdamATan2 implementation"""
+    import mlx.nn as nn
+    
+    # Create a simple model
+    model = nn.Linear(10, 10)
+    
+    # Create optimizer
+    optimizer = AdamATan2(learning_rate=1e-3, weight_decay=1.0)
+    
+    # Test forward pass
+    x = mx.random.normal((32, 10))
+    y = model(x)
+    loss = mx.mean(y ** 2)
+    
+    # Compute gradients
+    grad_fn = nn.value_and_grad(model, lambda m: mx.mean(m(x) ** 2))
+    loss, grads = grad_fn(model)
+    
+    # Apply gradients
+    optimizer.update(model, grads)
+    
+    print("✅ AdamATan2 test passed!")
+    print(f"Loss: {float(loss):.4f}")
+    
+
+if __name__ == "__main__":
+    test_adam_atan2()

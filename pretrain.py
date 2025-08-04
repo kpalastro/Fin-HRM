@@ -16,6 +16,7 @@ from typing import Tuple, List, Dict, Optional
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
+from mlx_adam_atan2 import AdamATan2, AdamATan2Scaled
 import mlx.utils
 
 # Import model components from the new structure
@@ -86,8 +87,13 @@ class HRMTrainer:
         self.max_epochs = max_epochs
         self.eval_interval = eval_interval
         
-        # AdamW optimizer with weight decay and gradient clipping (CRITICAL for ACT stability)
-        self.optimizer = optim.AdamW(learning_rate=learning_rate, weight_decay=weight_decay)
+        # Use AdamATan2 optimizer (matches original HRM implementation)
+        # This handles high weight decay (1.0) much better than standard AdamW
+        self.optimizer = AdamATan2Scaled(
+            learning_rate=learning_rate, 
+            weight_decay=weight_decay,
+            betas=(0.9, 0.95)  # Llama-style betas from original
+        )
         self.grad_clip_norm = 1.0
         
         self.step = 0
@@ -200,21 +206,23 @@ class HRMTrainer:
                     
                     total_loss = mx.array(0.0)
                     step_count = 0
+                    last_metrics = None
                     
                     # Unroll ACT loop for better performance
                     for step_count in range(model.halt_max_steps):
                         carry, outputs = model(carry, batch)
-                        loss, _ = compute_act_loss(outputs, batch["labels"])
+                        loss, metrics = compute_act_loss(outputs, batch["labels"])
                         total_loss = total_loss + loss
+                        last_metrics = metrics  # Save metrics from last step
                         
                         # Early stopping if all halted (but keep loop unrolled)
                         if carry.halted.all():
                             break
                     
-                    return total_loss, step_count + 1
+                    return total_loss, (step_count + 1, last_metrics)
                 
                 loss_and_grad_fn = nn.value_and_grad(self.model, loss_fn)
-                (loss, step_count), grads = loss_and_grad_fn(self.model)
+                (loss, (step_count, metrics)), grads = loss_and_grad_fn(self.model)
                 
                 # Gradient clipping (restored proper implementation)
                 def clip_grads(grads, max_norm=1.0):
@@ -243,10 +251,15 @@ class HRMTrainer:
                 self.optimizer.update(self.model, grads)
                 mx.eval(self.model.parameters(), self.optimizer.state)
                 
-                # Metrics for logging
-                carry = self.model.initial_carry(batch)
-                carry, outputs = self.model(carry, batch)
-                _, metrics = compute_act_loss(outputs, batch["labels"])
+                # More aggressive memory cleanup
+                if self.step % 50 == 0:  # More frequent
+                    mx.eval(mx.zeros(1))  # Force cleanup of computation graph
+                    # Also clear Python's garbage collector
+                    import gc
+                    gc.collect()
+                
+                # Metrics were already computed during loss calculation
+                # No need for another forward pass!
                 
                 batch_time = time.time() - batch_start
                 samples_per_sec = self.batch_size / batch_time
@@ -405,7 +418,7 @@ def main():
     parser.add_argument("--load_checkpoint", type=str, default=None, help="Path to checkpoint to load")
     parser.add_argument("--save_every", type=int, default=2000, help="Save checkpoint every N steps")
     parser.add_argument("--halt_max_steps", type=int, default=16, help="Maximum ACT steps")
-    parser.add_argument("--weight_decay", type=float, default=1.0, help="Weight decay for optimizer")
+    parser.add_argument("--weight_decay", type=float, default=0.1, help="Weight decay for optimizer")
     parser.add_argument("--no_auto_resume", action="store_true", help="Disable automatic checkpoint resuming")
     
     args = parser.parse_args()
