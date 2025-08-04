@@ -66,6 +66,7 @@ class AdamATan2(optim.Optimizer):
         # Update state
         state["m"] = m
         state["v"] = v
+        state["step"] += 1
         
         # Bias correction
         step = state["step"]
@@ -129,6 +130,7 @@ class AdamATan2Scaled(AdamATan2):
         # Update state
         state["m"] = m
         state["v"] = v
+        state["step"] += 1
         
         # Bias correction
         step = state["step"]
