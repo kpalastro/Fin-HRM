@@ -124,6 +124,7 @@ def train_hrm(config: HRMConfig):
         warmup_steps=config.warmup_steps,
         min_lr_ratio=config.min_lr_ratio,
         embedding_lr=config.embedding_lr,
+        gradient_accumulation_steps=config.gradient_accumulation_steps,
     )
 
     # Set checkpoint directory

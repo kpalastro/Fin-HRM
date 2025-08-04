@@ -85,6 +85,7 @@ class HRMTrainer:
         warmup_steps: int = 2000,
         min_lr_ratio: float = 0.1,
         embedding_lr: float = None,  # If None, use same as base lr
+        gradient_accumulation_steps: int = 1,  # For gradient accumulation
     ):
         self.model = model
         self.train_puzzles, self.train_solutions = train_data
@@ -92,6 +93,7 @@ class HRMTrainer:
         self.batch_size = batch_size
         self.max_epochs = max_epochs
         self.eval_interval = eval_interval
+        self.gradient_accumulation_steps = gradient_accumulation_steps
 
         # Use AdamATan2 optimizer (matches original HRM implementation)
         # This handles high weight decay (1.0) much better than standard AdamW
@@ -226,16 +228,24 @@ class HRMTrainer:
         }
 
     def train(self):
-        """Main training loop"""
+        """Main training loop with gradient accumulation support"""
         print(f"🚀 Starting HRM Training...")
         print(f"📊 Training samples: {len(self.train_puzzles):,}")
         print(f"📊 Validation samples: {len(self.val_puzzles):,}")
         print(f"🔧 Model: {self.model.inner.d_model}d, {self.model.inner.H_cycles}×{self.model.inner.L_cycles} reasoning")
         print(f"🎯 Architecture: MLX implementation of official HRM")
+        
+        # Gradient accumulation settings
+        grad_accum_steps = getattr(self, 'gradient_accumulation_steps', 1)
+        effective_batch_size = self.batch_size * grad_accum_steps
+        print(f"🔄 Gradient accumulation: {grad_accum_steps} steps (effective batch size: {effective_batch_size})")
 
         # Calculate total steps for progress tracking
-        steps_per_epoch = len(self.train_puzzles) // self.batch_size
+        steps_per_epoch = len(self.train_puzzles) // effective_batch_size
         total_steps = self.max_epochs * steps_per_epoch
+
+        # Initialize accumulated gradients
+        accumulated_grads = None
 
         for epoch in range(self.max_epochs):
             # Shuffle training data
@@ -270,7 +280,8 @@ class HRMTrainer:
                         if carry.halted.all():
                             break
 
-                    return total_loss, (step_count + 1, last_metrics)
+                    # Scale loss by accumulation steps for proper averaging
+                    return total_loss / grad_accum_steps, (step_count + 1, last_metrics)
 
                 loss_and_grad_fn = nn.value_and_grad(self.model, loss_fn)
                 (loss, (step_count, metrics)), grads = loss_and_grad_fn(self.model)
@@ -298,18 +309,38 @@ class HRMTrainer:
 
                 grads = clip_grads(grads, self.grad_clip_norm)
 
-                # Update learning rate with scheduler (matches original HRM)
-                if self.use_dual_optimizer:
-                    # For dual optimizer, update main optimizer's LR
-                    current_lr = self.lr_scheduler.get_lr(self.step)
-                    self.optimizer.update_learning_rate(current_lr)
+                # Accumulate gradients
+                if accumulated_grads is None:
+                    accumulated_grads = grads
                 else:
-                    # For single optimizer, use standard update
-                    current_lr = self.lr_scheduler.update_optimizer_lr(self.optimizer, self.step)
+                    # Add gradients element-wise
+                    def add_grads(acc_g, new_g):
+                        if acc_g is None or new_g is None:
+                            return new_g if acc_g is None else acc_g
+                        return acc_g + new_g
+                    
+                    accumulated_grads = nn.utils.tree_map(add_grads, accumulated_grads, grads)
 
-                # Update
-                self.optimizer.update(self.model, grads)
-                mx.eval(self.model.parameters(), self.optimizer.state)
+                # Check if we should update parameters (every grad_accum_steps)
+                is_accumulation_step = (batch_idx + 1) % grad_accum_steps == 0
+                is_last_batch = batch_idx == n_batches - 1
+                
+                if is_accumulation_step or is_last_batch:
+                    # Update learning rate with scheduler (matches original HRM)
+                    if self.use_dual_optimizer:
+                        # For dual optimizer, update main optimizer's LR
+                        current_lr = self.lr_scheduler.get_lr(self.step)
+                        self.optimizer.update_learning_rate(current_lr)
+                    else:
+                        # For single optimizer, use standard update
+                        current_lr = self.lr_scheduler.update_optimizer_lr(self.optimizer, self.step)
+
+                    # Update with accumulated gradients
+                    self.optimizer.update(self.model, accumulated_grads)
+                    mx.eval(self.model.parameters(), self.optimizer.state)
+                    
+                    # Reset accumulated gradients
+                    accumulated_grads = None
 
                 # More aggressive memory cleanup
                 if self.step % 50 == 0:  # More frequent

@@ -1,12 +1,13 @@
 # HRM Training Configuration for Sudoku-Extreme
-# EXACT parameters from HRM README.md single GPU setup (line 74)
+# Modified parameters - trying 8-GPU learning rate scaled for single GPU stability
 
-# Core hyperparameters (EXACT match to README)
-learning_rate: 0.00007  # lr=7e-5 from README
-embedding_lr: 0.00007   # puzzle_emb_lr=7e-5 from README  
+# Core hyperparameters (scaled for gradient accumulation stability)
+learning_rate: 0.00003  # lr=3e-5 (scaled down for large effective batch size)
+embedding_lr: 0.00003   # puzzle_emb_lr=3e-5 scaled similarly  
 weight_decay: 1.0       # weight_decay=1.0 from README
 embedding_weight_decay: 1.0  # puzzle_emb_weight_decay=1.0 from README
-batch_size: 384         # global_batch_size=384 from README
+batch_size: 384         # Direct batch size (as per HRM README)
+gradient_accumulation_steps: 1  # No gradient accumulation needed
 max_epochs: 20000       # epochs=20000 from README
 
 # Learning rate scheduling

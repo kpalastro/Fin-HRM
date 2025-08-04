@@ -20,6 +20,7 @@ class HRMConfig:
     weight_decay: float = 0.1
     embedding_weight_decay: float = 0.1
     batch_size: int = 32
+    gradient_accumulation_steps: int = 1  # For gradient accumulation
     max_epochs: int = 20000
     
     # Learning rate scheduling
