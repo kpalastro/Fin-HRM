@@ -31,7 +31,7 @@ class AdamATan2(optim.Optimizer):
         learning_rate: float = 1e-4,
         betas: tuple = (0.9, 0.99),
         weight_decay: float = 0.0,
-        a: float = 1.27,  # Scaling factor from PyTorch implementation
+        a: float = 1.0,  # No scaling in base version
     ):
         super().__init__()
         self.learning_rate = learning_rate
