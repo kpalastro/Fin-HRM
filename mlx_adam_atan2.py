@@ -82,7 +82,8 @@ class AdamATan2(optim.Optimizer):
         # where b = 1 / learning_rate, a = 1
         
         b = 1.0 / self.learning_rate
-        den = mx.sqrt(v / bias_correction2 * b * b)
+        # Add small epsilon to prevent numerical issues with very small v
+        den = mx.sqrt(mx.maximum(v / bias_correction2, 1e-20) * b * b)
         update = mx.arctan2(m / bias_correction1, den)
         update = update * self.learning_rate  # original uses -lr * a where a=1
         
@@ -140,7 +141,8 @@ class AdamATan2Scaled(AdamATan2):
         
         # EXACT implementation from PyTorch adam-atan2:
         b = 1.0 / self.learning_rate
-        den = mx.sqrt(v / bias_correction2 * b * b)
+        # Add small epsilon to prevent numerical issues with very small v
+        den = mx.sqrt(mx.maximum(v / bias_correction2, 1e-20) * b * b)
         update = mx.arctan2(m / bias_correction1, den)
         update = update * self.learning_rate
         
