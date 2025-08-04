@@ -17,6 +17,7 @@ import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 from mlx_adam_atan2 import AdamATan2, AdamATan2Scaled
+from mlx_adam_atan2_exact import AdamATan2Exact
 import mlx.utils
 
 # Import model components from the new structure
@@ -89,10 +90,13 @@ class HRMTrainer:
         
         # Use AdamATan2 optimizer (matches original HRM implementation)
         # This handles high weight decay (1.0) much better than standard AdamW
-        self.optimizer = AdamATan2(
+        # Use exact PyTorch AdamATan2 port (matches original HRM implementation)
+        self.optimizer = AdamATan2Exact(
             learning_rate=learning_rate, 
             weight_decay=weight_decay,
-            betas=(0.9, 0.95)  # Llama-style betas from original
+            betas=(0.9, 0.99),  # PyTorch AdamATan2 defaults
+            a=1.27,  # PyTorch default scaling
+            b=1.0    # PyTorch default
         )
         self.grad_clip_norm = 1.0
         
