@@ -10,7 +10,7 @@ python pretrain.py \
     --H_layers 4 \
     --L_layers 4 \
     --learning_rate 1e-4 \
-    --weight_decay 0.1 \
+    --weight_decay 1.0 \
     --batch_size 256 \
     --train_samples 1000 \
     --val_samples 200 \

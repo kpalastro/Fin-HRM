@@ -78,12 +78,16 @@ class AdamATan2(optim.Optimizer):
         
         # Add small epsilon to prevent sqrt of negative numbers due to numerical errors
         v_hat = mx.maximum(v_hat, 0)
-        v_hat_sqrt = mx.sqrt(v_hat + 1e-30)
+        v_hat_sqrt = mx.sqrt(v_hat + 1e-8)  # Use larger epsilon for stability
         
         # AdamATan2 update using atan2 instead of division
         # This is the key innovation - no epsilon needed!
-        # atan2 returns values in [-pi, pi], we clip to prevent extreme updates
         update = mx.arctan2(m_hat, v_hat_sqrt)
+        
+        # Prevent NaN propagation
+        update = mx.where(mx.isnan(update), 0.0, update)
+        update = mx.where(mx.isinf(update), mx.sign(update) * 1.5, update)
+        
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
@@ -140,13 +144,17 @@ class AdamATan2Scaled(AdamATan2):
         
         # Compute denominator for scaling
         v_hat = mx.maximum(v_hat, 0)  # Ensure non-negative
-        denom = mx.sqrt(v_hat + 1e-30)
+        denom = mx.sqrt(v_hat + 1e-8)  # Use larger epsilon for stability
         
         # AdamATan2 with proper scaling
         # Match the PyTorch implementation more closely
         # atan2 provides the update direction with built-in magnitude scaling
         update = mx.arctan2(m_hat, denom)
-        update = mx.clip(update, -1.5, 1.5)  # Prevent extreme angles
+        
+        # Prevent NaN propagation
+        update = mx.where(mx.isnan(update), 0.0, update)
+        update = mx.where(mx.isinf(update), mx.sign(update) * 1.5, update)
+        
         update = update * self.learning_rate
         
         # Apply weight decay (decoupled style)
