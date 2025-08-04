@@ -89,8 +89,11 @@ class AdamATan2(optim.Optimizer):
         # PyTorch uses b=1.0 by default, NOT 1/lr
         
         b = 1.0  # Match PyTorch default
-        den = mx.sqrt(v * (b * b / bias_correction2) + 1e-30)
-        update = mx.arctan2(m / bias_correction1, den)
+        den = mx.sqrt(v * (b * b / bias_correction2) + 1e-8)
+        # Clamp inputs to arctan2 to prevent extreme values
+        numerator = mx.clip(m / bias_correction1, -1e6, 1e6)
+        denominator = mx.maximum(den, 1e-8)
+        update = mx.arctan2(numerator, denominator)
         update = update * self.learning_rate * self.a  # Scale by lr and a factor
         
         # Apply update
@@ -150,8 +153,11 @@ class AdamATan2Scaled(AdamATan2):
         
         # EXACT implementation from PyTorch adam-atan2:
         b = 1.0  # Match PyTorch default
-        den = mx.sqrt(v * (b * b / bias_correction2) + 1e-30)
-        update = mx.arctan2(m / bias_correction1, den)
+        den = mx.sqrt(v * (b * b / bias_correction2) + 1e-8)
+        # Clamp inputs to arctan2 to prevent extreme values
+        numerator = mx.clip(m / bias_correction1, -1e6, 1e6)
+        denominator = mx.maximum(den, 1e-8)
+        update = mx.arctan2(numerator, denominator)
         update = update * self.learning_rate
         
         # Apply update
