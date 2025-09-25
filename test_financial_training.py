@@ -34,7 +34,7 @@ def test_financial_model():
     # Create small model
     print("🤖 Creating model...")
     model = FinancialHierarchicalReasoningModel(
-        n_features=18,
+        n_features=12,
         d_model=64,  # Small model for testing
         n_heads=4,
         H_cycles=1,

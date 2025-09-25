@@ -437,7 +437,7 @@ def main():
     # Create model
     print("🤖 Creating NIFTY Financial HRM model...")
     model = FinancialHierarchicalReasoningModel(
-        n_features=18,  # Number of financial features
+        n_features=12,  # Number of financial features
         d_model=config.d_model,
         n_heads=8,
         H_cycles=config.H_cycles,

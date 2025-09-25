@@ -8,10 +8,33 @@ import argparse
 import numpy as np
 import pandas as pd
 import mlx.core as mx
+import os
+import glob
 from typing import Dict, List, Tuple
 
 from financial_data_loader import load_financial_data, create_financial_batch, denormalize_predictions
 from models.financial_hrm import FinancialHierarchicalReasoningModel
+
+
+def find_latest_checkpoint(default_dir: str = "checkpoints_financial") -> str:
+    """Find the most recent valid .npz checkpoint file."""
+    try:
+        candidates = sorted(
+            glob.glob(os.path.join(default_dir, "*.npz")),
+            key=lambda p: os.path.getmtime(p),
+            reverse=True,
+        )
+        for path in candidates:
+            try:
+                if os.path.getsize(path) > 0:
+                    return path
+            except OSError:
+                continue
+    except Exception:
+        pass
+    # Fallbacks
+    fallback = os.path.join(default_dir, "final_model.npz")
+    return fallback
 
 
 def load_model(checkpoint_path: str, model_config: Dict) -> FinancialHierarchicalReasoningModel:
@@ -20,16 +43,16 @@ def load_model(checkpoint_path: str, model_config: Dict) -> FinancialHierarchica
     
     # Create model with same configuration as training
     model = FinancialHierarchicalReasoningModel(
-        n_features=model_config.get('n_features', 18),
-        d_model=model_config.get('d_model', 128),
+        n_features=model_config.get('n_features', 12),
+        d_model=model_config.get('d_model', 256),
         n_heads=model_config.get('n_heads', 8),
-        H_cycles=model_config.get('H_cycles', 1),
-        L_cycles=model_config.get('L_cycles', 1),
+        H_cycles=model_config.get('H_cycles', 2),
+        L_cycles=model_config.get('L_cycles', 2),
         H_layers=model_config.get('H_layers', 2),
         L_layers=model_config.get('L_layers', 2),
         halt_max_steps=model_config.get('halt_max_steps', 4),
         halt_exploration_prob=model_config.get('halt_exploration_prob', 0.1),
-        seq_len=model_config.get('seq_len', 5),
+        seq_len=model_config.get('seq_len', 10),
     )
     
     # Load weights
@@ -81,12 +104,10 @@ def prepare_prediction_data(
     
     print(f"📈 Using {len(df)} days of data for prediction")
     
-    # Define feature columns
+    # Define feature columns (match data loader)
     feature_columns = [
         'open', 'high', 'low', 'close', 'EMA 7', 'Volume', 'RSI', 'RSI-based MA',
-        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low', 
-        'prev_3d_high', 'prev_3d_low', 'prev_4d_high', 'prev_4d_low',
-        'prev_5d_high', 'prev_5d_low'
+        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low'
     ]
     
     # Normalize features using same normalization as training
@@ -215,19 +236,19 @@ def main():
     parser = argparse.ArgumentParser(description="Financial HRM Prediction")
     
     # Model parameters
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint (auto-discovered if not provided)")
     parser.add_argument("--data_path", type=str, default="data/data1.csv", help="Path to financial data CSV")
     
     # Prediction parameters
-    parser.add_argument("--sequence_length", type=int, default=5, help="Input sequence length")
+    parser.add_argument("--sequence_length", type=int, default=10, help="Input sequence length")
     parser.add_argument("--last_n_days", type=int, default=None, help="Use only last N days for prediction")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for prediction")
     parser.add_argument("--show_last", type=int, default=10, help="Number of recent predictions to show")
     
     # Model configuration (should match training)
-    parser.add_argument("--d_model", type=int, default=128, help="Model dimension")
-    parser.add_argument("--H_cycles", type=int, default=1, help="High-level cycles")
-    parser.add_argument("--L_cycles", type=int, default=1, help="Low-level cycles")
+    parser.add_argument("--d_model", type=int, default=256, help="Model dimension")
+    parser.add_argument("--H_cycles", type=int, default=2, help="High-level cycles")
+    parser.add_argument("--L_cycles", type=int, default=2, help="Low-level cycles")
     parser.add_argument("--H_layers", type=int, default=2, help="High-level layers")
     parser.add_argument("--L_layers", type=int, default=2, help="Low-level layers")
     parser.add_argument("--halt_max_steps", type=int, default=4, help="Maximum ACT steps")
@@ -242,7 +263,7 @@ def main():
     
     # Model configuration
     model_config = {
-        'n_features': 18,
+        'n_features': 12,
         'd_model': args.d_model,
         'n_heads': 8,
         'H_cycles': args.H_cycles,
@@ -255,8 +276,11 @@ def main():
     }
     
     try:
+        # Auto-discover checkpoint if not provided
+        checkpoint_path = args.checkpoint if args.checkpoint else find_latest_checkpoint()
+        
         # Load model
-        model = load_model(args.checkpoint, model_config)
+        model = load_model(checkpoint_path, model_config)
         
         # Prepare data
         samples, norm_info = prepare_prediction_data(

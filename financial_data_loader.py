@@ -42,9 +42,7 @@ def load_financial_data(
     # Define feature columns (excluding time and target columns)
     feature_columns = [
         'open', 'high', 'low', 'close', 'EMA 7', 'Volume', 'RSI', 'RSI-based MA',
-        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low', 
-        'prev_3d_high', 'prev_3d_low', 'prev_4d_high', 'prev_4d_low',
-        'prev_5d_high', 'prev_5d_low'
+        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low'
     ]
     
     # Normalize features (z-score normalization)
@@ -178,9 +176,7 @@ def denormalize_predictions(predictions: mx.array, normalization_info: Dict) -> 
     # Get high and low indices from feature columns
     feature_columns = [
         'open', 'high', 'low', 'close', 'EMA 7', 'Volume', 'RSI', 'RSI-based MA',
-        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low', 
-        'prev_3d_high', 'prev_3d_low', 'prev_4d_high', 'prev_4d_low',
-        'prev_5d_high', 'prev_5d_low'
+        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low'
     ]
     
     high_idx = feature_columns.index('high')

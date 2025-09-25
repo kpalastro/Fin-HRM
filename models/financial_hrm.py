@@ -38,7 +38,7 @@ class FinancialHierarchicalReasoningModel_Inner(nn.Module):
     
     def __init__(
         self,
-        n_features: int = 18,  # Number of financial features
+        n_features: int = 12,  # Number of financial features
         d_model: int = 512,
         n_heads: int = 8,
         H_cycles: int = 2,
@@ -184,7 +184,7 @@ class FinancialHierarchicalReasoningModel(nn.Module):
     
     def __init__(
         self,
-        n_features: int = 18,
+        n_features: int = 12,
         d_model: int = 512,
         n_heads: int = 8,
         H_cycles: int = 2,

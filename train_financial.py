@@ -443,7 +443,7 @@ def main():
     # Create model
     print("🤖 Creating Financial HRM model...")
     model = FinancialHierarchicalReasoningModel(
-        n_features=18,  # Number of financial features
+        n_features=12,  # Match data loader's feature count
         d_model=args.d_model,
         n_heads=8,
         H_cycles=args.H_cycles,

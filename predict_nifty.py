@@ -8,10 +8,33 @@ import argparse
 import numpy as np
 import pandas as pd
 import mlx.core as mx
+import os
+import glob
 from typing import Dict, List
 
 from financial_data_loader import load_financial_data, create_financial_batch, denormalize_predictions
 from models.financial_hrm import FinancialHierarchicalReasoningModel
+
+
+def find_latest_nifty_checkpoint(default_dir: str = "checkpoints_nifty") -> str:
+    """Find the most recent valid .npz checkpoint file."""
+    try:
+        candidates = sorted(
+            glob.glob(os.path.join(default_dir, "*.npz")),
+            key=lambda p: os.path.getmtime(p),
+            reverse=True,
+        )
+        for path in candidates:
+            try:
+                if os.path.getsize(path) > 0:
+                    return path
+            except OSError:
+                continue
+    except Exception:
+        pass
+    # Fallbacks
+    fallback = os.path.join(default_dir, "best_model_step_5000.npz")
+    return fallback
 
 
 def load_nifty_model(checkpoint_path: str) -> FinancialHierarchicalReasoningModel:
@@ -20,7 +43,7 @@ def load_nifty_model(checkpoint_path: str) -> FinancialHierarchicalReasoningMode
     
     # Create model with same configuration as training
     model = FinancialHierarchicalReasoningModel(
-        n_features=18,  # Number of financial features
+        n_features=12,  # Number of financial features
         d_model=512,
         n_heads=8,
         H_cycles=2,
@@ -89,7 +112,7 @@ def predict_next_values(
         denorm_pred = denormalize_predictions(pred, norm_info)
         
         # Get actual values for comparison
-        actual = sample['targets']  # Shape: (2,) [high, low]
+        actual = mx.array(sample['targets'])  # Shape: (2,) [high, low]
         denorm_actual = denormalize_predictions(actual.reshape(1, -1), norm_info)[0]
         
         # Calculate errors
@@ -163,7 +186,7 @@ def main():
     parser = argparse.ArgumentParser(description="NIFTY Financial HRM Prediction")
     
     # Model parameters
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint (auto-discovered if not provided)")
     parser.add_argument("--data_path", type=str, default="data/NIFTY_DAILY.csv", help="Path to NIFTY data CSV")
     
     # Prediction parameters
@@ -177,8 +200,11 @@ def main():
     print("=" * 40)
     
     try:
+        # Auto-discover checkpoint if not provided
+        checkpoint_path = args.checkpoint if args.checkpoint else find_latest_nifty_checkpoint()
+        
         # Load model
-        model = load_nifty_model(args.checkpoint)
+        model = load_nifty_model(checkpoint_path)
         
         # Load data
         print("📊 Loading NIFTY data...")

@@ -7,11 +7,34 @@ Shows how to make a single prediction for next high and low values
 import numpy as np
 import pandas as pd
 import mlx.core as mx
+import os
+import glob
 from financial_data_loader import load_financial_data, create_financial_batch, denormalize_predictions
 from models.financial_hrm import FinancialHierarchicalReasoningModel
 
 
-def make_single_prediction(checkpoint_path: str, data_path: str = "data/data1.csv"):
+def _find_latest_checkpoint(default_dir: str = "checkpoints_financial") -> str:
+    """Find the most recent valid .npz checkpoint file."""
+    try:
+        candidates = sorted(
+            glob.glob(os.path.join(default_dir, "*.npz")),
+            key=lambda p: os.path.getmtime(p),
+            reverse=True,
+        )
+        for path in candidates:
+            try:
+                if os.path.getsize(path) > 0:
+                    return path
+            except OSError:
+                continue
+    except Exception:
+        pass
+    # Fallbacks
+    fallback = os.path.join(default_dir, "final_model.npz")
+    return fallback
+
+
+def make_single_prediction(checkpoint_path: str | None = None, data_path: str = "data/data1.csv"):
     """
     Make a single prediction for the next high and low values
     
@@ -22,8 +45,12 @@ def make_single_prediction(checkpoint_path: str, data_path: str = "data/data1.cs
     print("🔮 Making Single Prediction for Next High and Low Values")
     print("=" * 60)
     
+    # Decide checkpoint
+    if not checkpoint_path:
+        checkpoint_path = _find_latest_checkpoint()
+    
     # Load a small amount of data to get normalization info
-    train_data, _ = load_financial_data(data_path, max_samples=1, sequence_length=5, target_horizon=1)
+    train_data, _ = load_financial_data(data_path, max_samples=1, sequence_length=10, target_horizon=1)
     if not train_data:
         print("❌ No data loaded")
         return
@@ -35,36 +62,34 @@ def make_single_prediction(checkpoint_path: str, data_path: str = "data/data1.cs
     df = pd.read_csv(data_path)
     print(f"📊 Loaded {len(df)} days of financial data")
     
-    # Use the last 5 days for prediction (matching our sequence length)
-    last_5_days = df.tail(5)
-    print(f"📈 Using last 5 days: {last_5_days['time'].iloc[0]} to {last_5_days['time'].iloc[-1]}")
+    # Use the last 10 days for prediction (matching our sequence length)
+    last_days = df.tail(10)
+    print(f"📈 Using last 10 days: {last_days['time'].iloc[0]} to {last_days['time'].iloc[-1]}")
     
     # Prepare features
     feature_columns = [
         'open', 'high', 'low', 'close', 'EMA 7', 'Volume', 'RSI', 'RSI-based MA',
-        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low', 
-        'prev_3d_high', 'prev_3d_low', 'prev_4d_high', 'prev_4d_low',
-        'prev_5d_high', 'prev_5d_low'
+        'prev_1d_high', 'prev_1d_low', 'prev_2d_high', 'prev_2d_low'
     ]
     
     # Normalize features
-    feature_data = last_5_days[feature_columns].values.astype(np.float32)
+    feature_data = last_days[feature_columns].values.astype(np.float32)
     feature_mean = np.array(norm_info['mean'])
     feature_std = np.array(norm_info['std'])
     normalized_features = (feature_data - feature_mean) / feature_std
     
     # Create model (same config as training)
     model = FinancialHierarchicalReasoningModel(
-        n_features=18,
-        d_model=128,
+        n_features=12,
+        d_model=256,
         n_heads=8,
-        H_cycles=1,
-        L_cycles=1,
+        H_cycles=2,
+        L_cycles=2,
         H_layers=2,
         L_layers=2,
         halt_max_steps=4,
         halt_exploration_prob=0.1,
-        seq_len=5,
+        seq_len=10,
     )
     
     # Load trained weights
@@ -74,7 +99,7 @@ def make_single_prediction(checkpoint_path: str, data_path: str = "data/data1.cs
     
     # Create batch for prediction
     batch = {
-        "features": mx.array(normalized_features.reshape(1, 5, 18), dtype=mx.float32),
+        "features": mx.array(normalized_features.reshape(1, 10, 12), dtype=mx.float32),
         "targets": mx.zeros((1, 2), dtype=mx.float32)  # Dummy targets for prediction
     }
     
@@ -92,7 +117,7 @@ def make_single_prediction(checkpoint_path: str, data_path: str = "data/data1.cs
     # If model halted immediately, run at least one step
     if outputs is None:
         carry, outputs = model(carry, batch)
-        step_count = 1
+        step_count = 4
     
     # Get prediction
     predictions = outputs['predictions']  # Shape: (1, 2) [high, low]
@@ -115,9 +140,9 @@ def make_single_prediction(checkpoint_path: str, data_path: str = "data/data1.cs
     print(f"  Reasoning Steps Used: {step_count}")
     
     # Show current values for comparison
-    current_high = last_5_days['high'].iloc[-1]
-    current_low = last_5_days['low'].iloc[-1]
-    current_close = last_5_days['close'].iloc[-1]
+    current_high = last_days['high'].iloc[-1]
+    current_low = last_days['low'].iloc[-1]
+    current_close = last_days['close'].iloc[-1]
     
     print(f"\n📈 Current Values (Last Day):")
     print(f"  Current High:  ${current_high:,.2f}")
@@ -144,11 +169,9 @@ def make_single_prediction(checkpoint_path: str, data_path: str = "data/data1.cs
 
 
 if __name__ == "__main__":
-    # Example usage
-    checkpoint_path = "checkpoints_financial/best_model_step_280.npz"  # Use the best checkpoint
-    
+    # Example usage with auto-discovery of latest checkpoint
     try:
-        result = make_single_prediction(checkpoint_path)
+        result = make_single_prediction()
         print(f"\n✅ Prediction completed successfully!")
     except Exception as e:
         print(f"❌ Error: {e}")
